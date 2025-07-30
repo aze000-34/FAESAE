@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Planning Personnel</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<div id="app">
+  <h1>Planning Personnel</h1>
+  <div id="login">
+    <input id="username" placeholder="Nom d'utilisateur"/>
+    <input id="password" type="password" placeholder="Mot de passe"/>
+    <button id="loginBtn">Connexion</button>
+  </div>
+  <div id="calendar" style="display:none;">
+    <div class="top-bar">
+      <button id="logoutBtn">Déconnexion</button>
+    </div>
+    <h2 id="weekLabel">Semaine actuelle</h2>
+    <div id="calendarGrid"></div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
