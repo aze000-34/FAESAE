@@ -3,25 +3,135 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Planning Personnel</title>
-  <link rel="stylesheet" href="style.css"/>
+  <title>Planning GGMécanique</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f4f4f4; margin:0; padding:20px; }
+    #app { max-width:1200px; margin:auto; background:#fff; padding:20px; border-radius:8px; }
+    input,button,select { padding:8px; margin:4px; }
+    .top-bar { display:flex; justify-content:space-between; }
+    #calendarGrid {
+      display:grid;
+      grid-template-columns:60px repeat(7,1fr);
+      grid-template-rows:30px repeat(24,50px);
+      gap:1px; margin-top:10px;
+    }
+    #calendarGrid div { border:1px solid #ccc; background:#eaeaea; position:relative; padding:2px; }
+    .header-cell { background:#ddd; text-align:center; font-weight:bold; }
+    .hour-cell { background:#f0f0f0; text-align:right; padding-right:5px; }
+    .event { font-size:11px; margin:1px 0; padding:2px; border-radius:4px; cursor:pointer; color:#000; }
+    #modal,#settings {
+      position:fixed; top:0; left:0; width:100%; height:100%;
+      background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center;
+    }
+    #modalContent,#settingsContent {
+      background:#fff; padding:20px; border-radius:8px; width:400px;
+    }
+    .tabs button { margin-right:8px; }
+    .tabContent { margin-top:10px; }
+    .user-entry, .action-type { display:flex; align-items:center; margin-bottom:8px; }
+    .user-entry input, .action-type input { margin-right:8px; }
+  </style>
 </head>
 <body>
-<div id="app">
-  <h1>Planning Personnel</h1>
-  <div id="login">
-    <input id="username" placeholder="Nom d'utilisateur"/>
-    <input id="password" type="password" placeholder="Mot de passe"/>
-    <button id="loginBtn">Connexion</button>
-  </div>
-  <div id="calendar" style="display:none;">
-    <div class="top-bar">
-      <button id="logoutBtn">Déconnexion</button>
+  <div id="app">
+    <h1>Planning GGMécanique</h1>
+    <div id="login">
+      <input id="username" placeholder="Nom d'utilisateur"/>
+      <input id="password" type="password" placeholder="Mot de passe"/>
+      <button id="loginBtn">Connexion</button>
     </div>
-    <h2 id="weekLabel">Semaine actuelle</h2>
-    <div id="calendarGrid"></div>
+
+    <div id="calendar" style="display:none;">
+      <div class="top-bar">
+        <button id="logoutBtn">Déconnexion</button>
+        <button id="settingsBtn">⚙️ Paramètres</button>
+      </div>
+      <h2 id="weekLabel">Semaine actuelle</h2>
+      <div id="weekNav">
+        <button id="prevWeekBtn">←</button>
+        <button id="nextWeekBtn">→</button>
+      </div>
+      <div id="calendarGrid"></div>
+    </div>
+
+    <!-- Modal événement -->
+    <div id="modal" style="display:none;">
+      <div id="modalContent">
+        <h3>Ajouter / Modifier un événement</h3>
+        <select id="eventType"></select><br/>
+        <input id="clientName" placeholder="Nom du client"/><br/>
+        <input id="clientPhone" placeholder="Téléphone"/><br/>
+        <input id="clientAddress" placeholder="Adresse"/><br/>
+        <input id="clientEmail" placeholder="Email"/><br/>
+        <input id="carModel" placeholder="Modèle de voiture"/><br/>
+        <input id="carKm" type="number" placeholder="Kilométrage"/><br/>
+        <input id="carPlate" placeholder="Plaque immat."/><br/>
+        <button id="saveEventBtn">Enregistrer</button>
+        <button id="deleteEventBtn" style="display:none;">Supprimer</button>
+        <button id="cancelEventBtn">Annuler</button>
+        <input type="hidden" id="eventKey"/>
+      </div>
+    </div>
+
+    <!-- Paramètres utilisateurs/actions -->
+    <div id="settings" style="display:none;">
+      <div id="settingsContent">
+        <h2>Paramètres</h2>
+        <div class="tabs">
+          <button id="tabUsers">Utilisateurs</button>
+          <button id="tabActions">Types d'actions</button>
+        </div>
+        <div id="settingsUsers" class="tabContent"></div>
+        <div id="settingsActions" class="tabContent" style="display:none;"></div>
+        <button id="saveSettingsBtn">Enregistrer</button>
+        <button id="closeSettingsBtn">Fermer</button>
+      </div>
+    </div>
   </div>
-</div>
-<script src="app.js"></script>
-</body>
-</html>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+    // ← Remplace par ta config Firebase exacte ↑
+    const firebaseConfig = {
+      apiKey: "VOTRE_API_KEY",
+      authDomain: "VOTRE_PROJET.firebaseapp.com",
+      databaseURL: "https://VOTRE_PROJET.firebaseio.com",
+      projectId: "VOTRE_PROJET",
+      storageBucket: "VOTRE_PROJET.appspot.com",
+      messagingSenderId: "VOTRE_SENDER_ID",
+      appId: "VOTRE_APP_ID"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db  = getDatabase(app);
+    const usersRef       = ref(db,'users');
+    const actionTypesRef = ref(db,'actionTypes');
+    const eventsRef      = ref(db,'events');
+
+    let users={}, actionTypes={}, events={}, currentUser=null, weekOffset=0;
+
+    // Abonnements temps réel
+    onValue(usersRef, snap => { users = snap.val() || {}; });
+    onValue(actionTypesRef, snap => { actionTypes = snap.val() || {}; renderCalendar(); });
+    onValue(eventsRef, snap => { events = snap.val() || {}; renderCalendar(); });
+
+    // Fonctions utilitaires
+    function getWeekDates(){
+      const now=new Date();
+      const monday=new Date(now.setDate(now.getDate() - now.getDay() + 1 + weekOffset*7));
+      return Array.from({length:7},(_,i)=>new Date(monday.getTime()+i*86400000));
+    }
+    function getKey(d,h){return d.toISOString().split('T')[0] + '-' + h;}
+
+    // Rendu du planning
+    function renderCalendar(){
+      if(!currentUser) return;
+      const grid = document.getElementById('calendarGrid');
+      grid.innerHTML = '';
+      const dates = getWeekDates();
+      document.getElementById('weekLabel').innerText = 'Semaine du ' + dates[0].toLocaleDateString();
+      grid.appendChild(document.createElement('div'));
+      dates.forEach(d=>{
+        const h = document.createElement('div');
+        h.clas
